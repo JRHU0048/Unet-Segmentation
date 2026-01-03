@@ -3,12 +3,10 @@ import os
 import numpy as np
 from PIL import Image
 import glob
-#import SimpleITK as sitk
 from torch import optim
 import torch.utils.data
 import torch
 import torch.nn.functional as F
-
 import torch.nn
 import torchvision
 import matplotlib.pyplot as plt
@@ -18,7 +16,6 @@ from Data_Loader import Images_Dataset, Images_Dataset_folder
 import torchsummary
 #from torch.utils.tensorboard import SummaryWriter
 #from tensorboardX import SummaryWriter
-
 import shutil
 import random
 from Models import Unet_dict, NestedUNet, U_Net, R2U_Net, AttU_Net, R2AttU_Net
@@ -29,33 +26,28 @@ import time
 #from ploting import VisdomLinePlotter
 #from visdom import Visdom
 
-
 #######################################################
-#Checking if GPU is used
+# Checking if GPU is used
 #######################################################
 
 train_on_gpu = torch.cuda.is_available()
-
 if not train_on_gpu:
     print('CUDA is not available. Training on CPU')
 else:
     print('CUDA is available. Training on GPU')
-
 device = torch.device("cuda:0" if train_on_gpu else "cpu")
 
 #######################################################
-#Setting the basic paramters of the model
+# Setting the basic paramters of the model
 #######################################################
 
-batch_size = 4
+batch_size = 64
+valid_size = 0.20
+epoch = 300
+# random_seed = random.randint(1, 100)
+random_seed = 42
 print('batch_size = ' + str(batch_size))
-
-valid_size = 0.15
-
-epoch = 15
 print('epoch = ' + str(epoch))
-
-random_seed = random.randint(1, 100)
 print('random_seed = ' + str(random_seed))
 
 shuffle = True
@@ -73,59 +65,63 @@ pin_memory = False
 if train_on_gpu:
     pin_memory = True
 
-#plotter = VisdomLinePlotter(env_name='Tutorial Plots')
+# plotter = VisdomLinePlotter(env_name='Tutorial Plots')
 
 #######################################################
-#Setting up the model
+# Setting up the model
 #######################################################
 
 model_Inputs = [U_Net, R2U_Net, AttU_Net, R2AttU_Net, NestedUNet]
-
 
 def model_unet(model_input, in_channel=3, out_channel=1):
     model_test = model_input(in_channel, out_channel)
     return model_test
 
-#passsing this string so that if it's AttU_Net or R2ATTU_Net it doesn't throw an error at torchSummary
-
+# passsing this string so that if it's AttU_Net or R2ATTU_Net it doesn't throw an error at torchSummary
 
 model_test = model_unet(model_Inputs[0], 3, 1)
-
 model_test.to(device)
 
 #######################################################
-#Getting the Summary of Model
+# Getting the Summary of Model
 #######################################################
 
 torchsummary.summary(model_test, input_size=(3, 128, 128))
 
 #######################################################
-#Passing the Dataset of Images and Labels
+# Passing the Dataset of Images and Labels
 #######################################################
 
-t_data = '/flush1/bat161/segmentation/New_Trails/venv/DATA/new_3C_I_ori/'
-l_data = '/flush1/bat161/segmentation/New_Trails/venv/DATA/new_3C_L_ori/'
-test_image = '/flush1/bat161/segmentation/New_Trails/venv/DATA/test_new_3C_I_ori/0131_0009.png'
-test_label = '/flush1/bat161/segmentation/New_Trails/venv/DATA/test_new_3C_L_ori/0131_0009.png'
-test_folderP = '/flush1/bat161/segmentation/New_Trails/venv/DATA/test_new_3C_I_ori/*'
-test_folderL = '/flush1/bat161/segmentation/New_Trails/venv/DATA/test_new_3C_L_ori/*'
+t_data = '/home/tangzhiri/yanhanhu/dataset/G1020-img/'
+l_data = '/home/tangzhiri/yanhanhu/dataset/G1020-mask/'
+test_image = '/home/tangzhiri/yanhanhu/dataset/ORIGA-img/001.jpg'
+test_label = '/home/tangzhiri/yanhanhu/dataset/ORIGA-mask/001.png'
+test_folderP = '/home/tangzhiri/yanhanhu/dataset/ORIGA-img/*'
+test_folderL = '/home/tangzhiri/yanhanhu/dataset/ORIGA-mask/*'
 
-Training_Data = Images_Dataset_folder(t_data,
-                                      l_data)
+Training_Data = Images_Dataset_folder(t_data, l_data)
 
 #######################################################
-#Giving a transformation for input data
+# Giving a transformation for input data (image and mask)
 #######################################################
 
+# train image
 data_transform = torchvision.transforms.Compose([
           #  torchvision.transforms.Resize((128,128)),
          #   torchvision.transforms.CenterCrop(96),
             torchvision.transforms.ToTensor(),
             torchvision.transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+            # torchvision.transforms.ToTensor(),
+            # torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # 3 channel
         ])
 
+# train label
+data_transform_label = torchvision.transforms.Compose([
+    torchvision.transforms.ToTensor(),
+])
+
 #######################################################
-#Trainging Validation Split
+# Trainging Validation Split
 #######################################################
 
 num_train = len(Training_Data)
@@ -147,7 +143,7 @@ valid_loader = torch.utils.data.DataLoader(Training_Data, batch_size=batch_size,
                                            num_workers=num_workers, pin_memory=pin_memory,)
 
 #######################################################
-#Using Adam as Optimizer
+# Using Adam as Optimizer
 #######################################################
 
 initial_lr = 0.001
@@ -159,7 +155,7 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, MAX_STEP, eta_min=1e
 #scheduler = optim.lr_scheduler.CosineAnnealingLr(opt, epoch, 1)
 
 #######################################################
-#Writing the params to tensorboard
+# Writing the params to tensorboard
 #######################################################
 
 #writer1 = SummaryWriter()
@@ -169,7 +165,7 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, MAX_STEP, eta_min=1e
 #model_test.to(device)
 
 #######################################################
-#Creating a Folder for every data of the program
+# Creating a Folder for every data of the program
 #######################################################
 
 New_folder = './model'
@@ -185,13 +181,13 @@ else:
     print("Successfully created the main directory '%s' " % New_folder)
 
 #######################################################
-#Setting the folder of saving the predictions
+# Setting the folder of saving the predictions
 #######################################################
 
 read_pred = './model/pred'
 
 #######################################################
-#Checking if prediction folder exixts
+# Checking if prediction folder exixts
 #######################################################
 
 if os.path.exists(read_pred) and os.path.isdir(read_pred):
@@ -205,7 +201,7 @@ else:
     print("Successfully created the prediction directory '%s' of dice loss" % read_pred)
 
 #######################################################
-#checking if the model exists and if true then delete
+# Checking if the model exists and if true then delete
 #######################################################
 
 read_model_path = './model/Unet_D_' + str(epoch) + '_' + str(batch_size)
@@ -222,7 +218,7 @@ else:
     print("Successfully created the model directory '%s' " % read_model_path)
 
 #######################################################
-#Training loop
+# Training loop
 #######################################################
 
 for i in range(epoch):
@@ -230,11 +226,13 @@ for i in range(epoch):
     train_loss = 0.0
     valid_loss = 0.0
     since = time.time()
-    scheduler.step(i)
-    lr = scheduler.get_lr()
+    # scheduler.step(i) # abandon
+    # scheduler.step() # fix
+    # lr = scheduler.get_lr() # abandon
+    # lr = scheduler.get_last_lr() # fix
 
     #######################################################
-    #Training Data
+    # Training Data
     #######################################################
 
     model_test.train()
@@ -270,29 +268,29 @@ for i in range(epoch):
 
 
     #######################################################
-    #Validation Step
+    # Validation Step
     #######################################################
 
     model_test.eval()
-    torch.no_grad() #to increase the validation process uses less memory
+    # torch.no_grad() # to increase the validation process uses less memory
+    with torch.no_grad():  # torch.no_grad()需要作为上下文管理器使用
+        for x1, y1 in valid_loader:
+            x1, y1 = x1.to(device), y1.to(device)
 
-    for x1, y1 in valid_loader:
-        x1, y1 = x1.to(device), y1.to(device)
+            y_pred1 = model_test(x1)
+            lossL = calc_loss(y_pred1, y1)     # Dice_loss Used
 
-        y_pred1 = model_test(x1)
-        lossL = calc_loss(y_pred1, y1)     # Dice_loss Used
-
-        valid_loss += lossL.item() * x1.size(0)
-        x_size1 = lossL.item() * x1.size(0)
+            valid_loss += lossL.item() * x1.size(0)
+            x_size1 = lossL.item() * x1.size(0)
 
     #######################################################
-    #Saving the predictions
+    # Saving the predictions
     #######################################################
 
     im_tb = Image.open(test_image)
     im_label = Image.open(test_label)
     s_tb = data_transform(im_tb)
-    s_label = data_transform(im_label)
+    s_label = data_transform_label(im_label)
     s_label = s_label.detach().numpy()
 
     pred_tb = model_test(s_tb.unsqueeze(0).to(device)).cpu()
@@ -308,11 +306,15 @@ for i in range(epoch):
   #  accuracy = accuracy_score(pred_tb[0][0], s_label)
 
     #######################################################
-    #To write in Tensorboard
+    # To write in Tensorboard
     #######################################################
 
     train_loss = train_loss / len(train_idx)
     valid_loss = valid_loss / len(valid_idx)
+
+    # 将学习率调度修改为每个epoch之后调用
+    scheduler.step()
+    lr = scheduler.get_last_lr()
 
     if (i+1) % 1 == 0:
         print('Epoch: {}/{} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f}'.format(i + 1, epoch, train_loss,
@@ -321,9 +323,8 @@ for i in range(epoch):
   #      writer1.add_scalar('Validation Loss', valid_loss, n_iter)
         #writer1.add_image('Pred', pred_tb[0]) #try to get output of shape 3
 
-
     #######################################################
-    #Early Stopping
+    # Early Stopping
     #######################################################
 
     if valid_loss <= valid_loss_min and epoch_valid >= i: # and i_valid <= 2:
@@ -374,19 +375,19 @@ for i in range(epoch):
     n_iter += 1
 
 #######################################################
-#closing the tensorboard writer
+# closing the tensorboard writer
 #######################################################
 
-#writer1.close()
+# writer1.close()
 
 #######################################################
-#if using dict
+# if using dict
 #######################################################
 
-#model_test.filter_dict
+# model_test.filter_dict
 
 #######################################################
-#Loading the model
+# Loading the model
 #######################################################
 
 test1 =model_test.load_state_dict(torch.load('./model/Unet_D_' +
@@ -412,15 +413,13 @@ model_test.load_state_dict(torch.load('./model/Unet_D_' +
 model_test.eval()
 
 #######################################################
-#opening the test folder and creating a folder for generated images
+# opening the test folder and creating a folder for generated images
 #######################################################
 
 read_test_folder = glob.glob(test_folderP)
 x_sort_test = natsort.natsorted(read_test_folder)  # To sort
 
-
 read_test_folder112 = './model/gen_images'
-
 
 if os.path.exists(read_test_folder112) and os.path.isdir(read_test_folder112):
     shutil.rmtree(read_test_folder112)
@@ -464,10 +463,8 @@ else:
     print("Successfully created the testing directory %s " % read_test_folder_L_Thres)
 
 
-
-
 #######################################################
-#saving the images in the files
+# saving the images in the files
 #######################################################
 
 img_test_no = 0
@@ -498,7 +495,7 @@ for i in range(len(read_test_folder)):
 
 
 ####################################################
-#Calculating the Dice Score
+# Calculating the Dice Score
 ####################################################
 
 data_transform = torchvision.transforms.Compose([
@@ -508,15 +505,11 @@ data_transform = torchvision.transforms.Compose([
 #            torchvision.transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
         ])
 
-
-
 read_test_folderP = glob.glob('./model/gen_images/*')
 x_sort_testP = natsort.natsorted(read_test_folderP)
 
-
 read_test_folderL = glob.glob(test_folderL)
 x_sort_testL = natsort.natsorted(read_test_folderL)  # To sort
-
 
 dice_score123 = 0.0
 x_count = 0
